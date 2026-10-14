@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gala Auction Clerk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: clerk console. Lot list | bid desk | live transcript. Stacks to one column on phones. */
+:root {
+  --bg: #eef0f4; --panel: #ffffff; --panel-2: #f6f7fa; --ink: #161922; --muted: #5b6172; --line: #d9dce5;
+  --accent: #8f6410; --accent-ink: #ffffff; --accent-soft: #f6ead0;
+  --ok: #1d7a4b; --ok-soft: #dcf2e6; --warn: #9a5800; --warn-soft: #fdeccf; --bad: #b42318; --bad-soft: #fde2df;
+  --sugg: #2852c9; --sugg-soft: #e1e8fb;
+  --f-ui: "Barlow Semi Condensed", "Avenir Next Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-num: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1015; --panel: #171a21; --panel-2: #1e222b; --ink: #eceef3; --muted: #9aa1b2; --line: #2b303b;
+    --accent: #e3b24f; --accent-ink: #1b1404; --accent-soft: #3a2f17;
+    --ok: #4cc38a; --ok-soft: #14301f; --warn: #f0a640; --warn-soft: #3a2a12; --bad: #ff7468; --bad-soft: #3d1a17;
+    --sugg: #8aa8ff; --sugg-soft: #1b2442;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1015; --panel: #171a21; --panel-2: #1e222b; --ink: #eceef3; --muted: #9aa1b2; --line: #2b303b;
+  --accent: #e3b24f; --accent-ink: #1b1404; --accent-soft: #3a2f17;
+  --ok: #4cc38a; --ok-soft: #14301f; --warn: #f0a640; --warn-soft: #3a2a12; --bad: #ff7468; --bad-soft: #3d1a17;
+  --sugg: #8aa8ff; --sugg-soft: #1b2442;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 16px; line-height: 1.4; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.num { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand .gavel { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 13px; color: var(--accent); }
+.brand .ev { font-weight: 600; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+nav.tabs { display: flex; gap: 4px; }
+nav.tabs button { border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--muted); }
+nav.tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--ink); }
+.spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--line); white-space: nowrap; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.live .dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.pill.warn .dot { background: var(--warn); }
+.pill.bad .dot { background: var(--bad); }
+.clock { font-size: 14px; color: var(--muted); }
+.iconbtn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 4px 9px; cursor: pointer; }
+
+main { padding-block: 16px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.desk { display: grid; grid-template-columns: 250px minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .desk { grid-template-columns: 220px minmax(0, 1fr); } .desk .side-r { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .desk { grid-template-columns: minmax(0, 1fr); } }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+.card > h2, .sec-h { margin: 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.card > h2 { padding: 12px 14px 8px; }
+
+/* Lot list */
+.lotlist { list-style: none; margin: 0; padding: 4px; display: grid; gap: 2px; max-height: calc(100vh - 140px); overflow: auto; }
+.lotlist button { width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; cursor: pointer; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.lotlist button:hover { background: var(--panel-2); }
+.lotlist button[aria-current="true"] { background: var(--accent-soft); }
+.lotlist .n { font-family: var(--f-num); font-weight: 700; color: var(--muted); font-size: 14px; }
+.lotlist .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.tag.open { background: var(--ok-soft); color: var(--ok); }
+.tag.sold { background: var(--accent-soft); color: var(--accent); }
+.tag.passed { background: var(--bad-soft); color: var(--bad); }
+
+/* Lot panel */
+.lothead { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.lothead .eyebrow { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lothead h1 { margin: 0; font-size: 28px; line-height: 1.15; text-wrap: balance; font-weight: 700; }
+.lothead .meta { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 15px; align-items: center; }
+.lothead .meta label { display: inline-flex; gap: 6px; align-items: center; }
+.lothead .meta input { width: 90px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); font-family: var(--f-num); }
+.body { padding: 16px 18px; display: grid; gap: 16px; }
+
+.high { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 14px 16px; border-radius: var(--r); background: var(--panel-2); border: 1px solid var(--line); }
+.high .lbl { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.high .amt { font-family: var(--f-num); font-size: 46px; font-weight: 700; line-height: 1; margin-top: 4px; }
+.high .who { text-align: right; }
+.high .paddle { font-family: var(--f-num); font-size: 30px; font-weight: 700; color: var(--accent); }
+.high .name { color: var(--muted); font-size: 15px; }
+
+form.bid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 10px; align-items: end; }
+@media (max-width: 520px) { form.bid { grid-template-columns: 1fr 1fr; } form.bid .go { grid-column: 1 / -1; } }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.field input, .field select, .field textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+form.bid input { font-family: var(--f-num); font-size: 28px; font-weight: 700; padding: 8px 12px; }
+.btn { border: 1px solid var(--line); background: var(--panel-2); padding: 10px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.ok { background: var(--ok); border-color: var(--ok); color: var(--panel); }
+.btn.danger { color: var(--bad); }
+.btn.big { padding: 14px 22px; font-size: 18px; }
+.btn.go { height: 58px; font-size: 18px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.kbd { font-family: var(--f-num); font-size: 12px; padding: 1px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--muted); }
+.hint { font-size: 13px; color: var(--muted); }
+
+.msg { padding: 9px 12px; border-radius: 8px; font-weight: 500; }
+.msg.err { background: var(--bad-soft); color: var(--bad); }
+.msg.warn { background: var(--warn-soft); color: var(--warn); }
+.msg.ok { background: var(--ok-soft); color: var(--ok); }
+
+.confirm { padding: 14px 16px; border-radius: var(--r); border: 2px solid var(--accent); background: var(--accent-soft); display: grid; gap: 10px; }
+.confirm strong { font-size: 20px; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+td.r, th.r { text-align: right; }
+tr.void td { text-decoration: line-through; color: var(--muted); }
+.tablewrap { overflow-x: auto; }
+.src { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 5px; background: var(--sugg-soft); color: var(--sugg); }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--sugg); cursor: pointer; font-weight: 600; }
+
+/* Transcript side */
+.side-r { display: grid; gap: 16px; }
+.engine { padding: 12px 14px; display: grid; gap: 10px; }
+.engine .row select { flex: 1; min-width: 0; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.meter { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.suggs { padding: 0 10px 10px; display: grid; gap: 8px; }
+.sugg { border: 1px solid var(--sugg); background: var(--sugg-soft); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; animation: pop .25s ease-out; }
+.sugg .what { font-size: 20px; font-weight: 700; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.sugg .what .num { color: var(--sugg); }
+.sugg .heard { font-size: 13px; color: var(--muted); font-style: italic; }
+.sugg .row .btn { padding: 6px 12px; }
+@keyframes pop { from { transform: translateY(-4px); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sugg { animation: none; } .meter i { transition: none; } }
+.empty { padding: 4px 14px 14px; color: var(--muted); font-size: 14px; }
+.tlog { max-height: 46vh; overflow: auto; padding: 0 14px 12px; display: grid; gap: 6px; font-size: 15px; }
+.tline { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 8px; }
+.tline time { font-family: var(--f-num); font-size: 12px; color: var(--muted); padding-top: 2px; }
+.tline mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 2px; }
+.tline.interim { color: var(--muted); font-style: italic; }
+.tline .eng { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-left: 6px; }
+
+/* Other views */
+.stack { display: grid; gap: 16px; max-width: 1100px; }
+.pad { padding: 14px 16px; display: grid; gap: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; align-items: start; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.tile { padding: 14px 16px; }
+.tile .v { font-family: var(--f-num); font-size: 30px; font-weight: 700; }
+.tile .l { font-size: 13px; color: var(--muted); font-weight: 600; }
+.banner { padding: 10px 14px; border-radius: var(--r); background: var(--warn-soft); color: var(--warn); font-weight: 500; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+td input { width: 100%; min-width: 60px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+td input.num { max-width: 110px; }
+details.lt summary { cursor: pointer; font-weight: 600; }
+details.lt p { margin: 6px 0 0; color: var(--muted); font-size: 14px; white-space: pre-wrap; }
+audio { width: 100%; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="gavel">Auction Clerk</span><span class="ev" id="evName"></span></div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-view="auction">Live auction</button>
+    <button role="tab" data-view="lots">Lots &amp; paddles</button>
+    <button role="tab" data-view="results">Results</button>
+    <button role="tab" data-view="audio">Audio &amp; transcript</button>
+  </nav>
+  <div class="spacer"></div>
+  <span class="pill" id="hdrEngine"><span class="dot"></span><span>Transcript off</span></span>
+  <span class="clock num" id="clock"></span>
+  <button class="iconbtn" id="themeBtn" title="Switch light or dark">◐</button>
+</header>
+
+<main>
+  <!-- LIVE AUCTION -->
+  <section id="view-auction">
+    <div class="desk">
+      <aside class="card">
+        <h2>Lots</h2>
+        <ul class="lotlist" id="lotList"></ul>
+      </aside>
+      <section class="card" id="lotPanel"></section>
+      <aside class="side-r">
+        <div class="card">
+          <h2>Live transcript</h2>
+          <div class="engine">
+            <div class="row">
+              <select id="engineSel" aria-label="Transcript engine">
+                <option value="chrome">Chrome speech (online)</option>
+                <option value="whisper">Whisper on this laptop (offline)</option>
+              </select>
+              <button class="btn" id="engineBtn">Start</button>
+            </div>
+            <div class="hint" id="engineStatus">Off. Start it when the auctioneer takes the stage.</div>
+            <label class="check"><input type="checkbox" id="autoFallback"> Switch to offline Whisper if Chrome speech fails</label>
+            <div>
+              <div class="row" style="justify-content:space-between"><span class="hint" id="modelState">Offline fallback: not loaded</span><button class="linkbtn" id="modelLoad">Load now</button></div>
+              <div class="meter" id="modelMeter" hidden><i></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Heard a bid?</h2>
+          <div class="suggs" id="suggs"></div>
+          <div class="empty" id="suggEmpty">Suggestions appear here when the auctioneer names a paddle, like “six hundred, paddle 42.” Confirm with <span class="kbd">⌘ Enter</span>, dismiss with <span class="kbd">Esc</span>.</div>
+        </div>
+        <div class="card">
+          <h2>Transcript, this lot</h2>
+          <div class="tlog" id="tlog"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- LOTS & PADDLES -->
+  <section id="view-lots" hidden>
+    <div class="stack">
+      <div class="banner" id="exampleBanner" hidden>These are example lots. Replace them with your real items before the gala. <button class="btn" data-action="clear-examples">Remove example lots</button></div>
+      <div class="card pad">
+        <div class="sec-h">Event</div>
+        <label class="field"><span>Event name</span><input id="evInput" maxlength="80"></label>
+      </div>
+      <div class="card pad">
+        <div class="row" style="justify-content:space-between"><div class="sec-h">Lots</div>
+          <div class="row"><button class="btn" data-action="add-lot">Add lot</button>
+          <label class="btn">Import CSV<input type="file" id="lotCsv" accept=".csv,text/csv" hidden></label></div></div>
+        <div class="hint">CSV columns: lot, title, donor, opening, increment. A header row is optional.</div>
+        <div class="tablewrap"><table id="lotTable"></table></div>
+      </div>
+      <div class="card pad">
+        <div class="sec-h">Paddles</div>
+        <div class="hint">One per line: paddle number, then guest name. Paste straight from your check-in sheet. Optional, but bids from unknown paddles get flagged when this list exists.</div>
+        <label class="field"><span>Paddle list</span><textarea id="paddleText" rows="8" placeholder="101, Jordan Ellis&#10;102, Priya Raman"></textarea></label>
+        <div class="row"><button class="btn primary" data-action="save-paddles">Save paddles</button><span class="hint" id="paddleCount"></span></div>
+      </div>
+      <div class="card pad">
+        <div class="sec-h">Backup &amp; reset</div>
+        <div class="hint">Everything saves in this browser as you go. Download a backup before and after the auction, or to move to another laptop.</div>
+        <div class="row">
+          <button class="btn" data-action="export-json">Download backup</button>
+          <label class="btn">Restore backup<input type="file" id="jsonIn" accept=".json,application/json" hidden></label>
+          <button class="btn danger" data-action="reset-ask">Reset everything</button>
+        </div>
+        <div id="resetConfirm" class="confirm" hidden>
+          <strong>Erase all lots, bids, paddles and transcript?</strong>
+          <div class="row"><button class="btn danger" data-action="reset-do">Erase everything</button><button class="btn" data-action="reset-cancel">Keep my data</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="view-results" hidden>
+    <div class="stack" id="resultsBody"></div>
+  </section>
+
+  <!-- AUDIO -->
+  <section id="view-audio" hidden>
+    <div class="stack">
+      <div class="card pad">
+        <div class="sec-h">1 · The recorder's audio</div>
+        <div class="hint">After the event, load the spare person's recording here. Then tell the app when it started, so each lot can be played back on its own.</div>
+        <label class="btn" style="justify-self:start">Choose audio file<input type="file" id="audioIn" accept="audio/*,video/*,.m4a,.mp3,.wav,.webm" hidden></label>
+        <div class="hint" id="audioName">No file loaded.</div>
+        <audio id="player" controls hidden></audio>
+        <div class="grid2">
+          <label class="field"><span>Recording started at (date and time)</span><input type="datetime-local" step="1" id="recStart"></label>
+          <div class="field"><span>Or sync by ear: play the file, pause where a lot opens, then</span>
+            <div class="row"><select id="syncLot" style="flex:1;min-width:0;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel)"></select><button class="btn" data-action="sync">This moment is that lot opening</button></div></div>
+        </div>
+        <div class="tablewrap"><table id="clipTable"></table></div>
+      </div>
+      <div class="card pad">
+        <div class="sec-h">2 · Full transcript (Whisper on the MacBook)</div>
+        <div class="hint">Run <span class="num">transcribe.sh</span> on the recording (see README). It produces a .srt file. Import it here and each line is filed under the lot it belongs to, using the start time above.</div>
+        <label class="btn" style="justify-self:start">Import .srt or .vtt<input type="file" id="srtIn" accept=".srt,.vtt,text/vtt" hidden></label>
+        <div id="lotTranscripts"></div>
+      </div>
+      <div class="card pad">
+        <div class="sec-h">3 · Backup recording on this laptop (optional)</div>
+        <div class="hint">The spare person's recording is the official one. This records from the laptop mic too, in case theirs fails. Save the file before closing the tab.</div>
+        <div class="row">
+          <label class="field" style="flex:1;min-width:200px"><span>Microphone</span><select id="micSel"><option value="">System default</option></select></label>
+        </div>
+        <div class="row"><button class="btn" id="recBtn">Start laptop recording</button><span class="num hint" id="recTime"></span>
+          <button class="btn" id="recSave" disabled>Save recording</button><button class="btn" id="recUse" disabled>Use it for lot playback</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="parser.js"></script>
+<script type="module">
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = n => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const tclock = ms => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+const mmss = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const parseMoney = v => Number(String(v ?? '').replace(/[$,\s]/g, ''));
+
+/* ---------- State ---------- */
+const KEY = 'gala-auction-clerk-v1';
+function exampleLots() {
+  return [
+    ['1', 'Weekend cabin in the Catskills (example)', 'Example donor', 300, 50],
+    ['2', "Chef's tasting dinner for six (example)", 'Example donor', 500, 50],
+    ['3', 'Home energy audit + heat pump consult (example)', 'Example donor', 200, 25],
+    ['4', 'Framed Hudson River print (example)', 'Example donor', 150, 25],
+  ].map(([number, title, donor, opening, increment]) => ({ id: uid(), number, title, donor, opening, increment, status: 'ready', openedAt: null, closedAt: null, winnerPaddle: null, winnerAmount: null, example: true }));
+}
+function freshState() {
+  return { eventName: 'Team Celebratory Gala', lots: exampleLots(), bids: [], paddles: {}, transcript: [], selectedLotId: null, view: 'auction',
+    recStartAt: null, srt: [], settings: { engine: 'chrome', autoFallback: true, micId: '' } };
+}
+let state;
+try { state = JSON.parse(localStorage.getItem(KEY)) || freshState(); } catch { state = freshState(); }
+state = Object.assign(freshState(), state, { settings: Object.assign(freshState().settings, state.settings || {}) });
+let saveTimer = null;
+function save(now) {
+  clearTimeout(saveTimer);
+  const doit = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn('Save failed', e); } };
+  if (now) doit(); else saveTimer = setTimeout(doit, 400);
+}
+
+const lotById = id => state.lots.find(l => l.id === id);
+const openLot = () => state.lots.find(l => l.status === 'open');
+const lotBids = id => state.bids.filter(b => b.lotId === id && !b.voided);
+const highBid = id => { const b = lotBids(id); return b.length ? b[b.length - 1] : null; };
+const nextAmount = lot => { const h = highBid(lot.id); return h ? h.amount + Number(lot.increment || 0) : Number(lot.opening || 0); };
+const pname = p => state.paddles[p] || '';
+const sortedLots = () => [...state.lots].sort((a, b) => (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0) || String(a.number).localeCompare(String(b.number)));
+
+/* ---------- Header, tabs, theme ---------- */
+function setView(v) {
+  state.view = v; save();
+  for (const b of $$('nav.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === v));
+  for (const s of ['auction', 'lots', 'results', 'audio']) $('#view-' + s).hidden = s !== v;
+  if (v === 'lots') renderLots(); if (v === 'results') renderResults(); if (v === 'audio') renderAudio(); if (v === 'auction') renderAuction();
+}
+$$('nav.tabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+setInterval(() => { $('#clock').textContent = tclock(Date.now()); }, 1000);
+$('#clock').textContent = tclock(Date.now());
+try { const t = localStorage.getItem(KEY + ':theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+$('#themeBtn').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const nxt = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = nxt;
+  try { localStorage.setItem(KEY + ':theme', nxt); } catch {}
+});
+
+/* ---------- Live auction view ---------- */
+let msgTimer = null;
+function flash(text, kind = 'err') {
+  const el = $('#lotMsg'); if (!el) return;
+  el.className = 'msg ' + kind; el.textContent = text; el.hidden = false;
+  clearTimeout(msgTimer); msgTimer = setTimeout(() => { el.hidden = true; }, 7000);
+}
+
+function renderAuction() {
+  $('#evName').textContent = state.eventName;
+  renderLotList(); renderLotPanel(); renderTranscript(); renderSuggestions();
+}
+function renderLotList() {
+  const sel = state.selectedLotId;
+  $('#lotList').innerHTML = sortedLots().map(l => `<li><button data-lot="${l.id}" aria-current="${l.id === sel}">
+    <span class="n">${esc(l.number)}</span><span class="t">${esc(l.title)}</span>${l.status === 'ready' ? '<span></span>' : `<span class="tag ${l.status}">${l.status}</span>`}</button></li>`).join('')
+    || '<li class="empty">No lots yet. Add them under Lots &amp; paddles.</li>';
+}
+$('#lotList').addEventListener('click', e => {
+  const b = e.target.closest('button[data-lot]'); if (!b) return;
+  state.selectedLotId = b.dataset.lot; save(); pendingConfirm = null; renderLotList(); renderLotPanel(); renderTranscript();
+});
+
+let pendingConfirm = null; // 'sold' | 'pass' | 'reopen'
+function renderLotPanel() {
+  const panel = $('#lotPanel');
+  if (!state.selectedLotId || !lotById(state.selectedLotId)) state.selectedLotId = (openLot() || sortedLots().find(l => l.status === 'ready') || sortedLots()[0] || {}).id || null;
+  const lot = lotById(state.selectedLotId);
+  if (!lot) { panel.innerHTML = '<div class="body"><p class="hint">Add lots under Lots &amp; paddles to start.</p></div>'; return; }
+  const open = openLot();
+  const bids = state.bids.filter(b => b.lotId === lot.id);
+  const h = highBid(lot.id);
+  const statusTag = `<span class="tag ${lot.status}">${lot.status === 'ready' ? 'not started' : lot.status}</span>`;
+  const editable = lot.status !== 'sold' && lot.status !== 'passed';
+  let html = `<div class="lothead">
+    <div class="eyebrow"><span>Lot <span class="num">${esc(lot.number)}</span></span>${statusTag}${lot.openedAt ? `<span class="num" style="letter-spacing:0">opened ${tclock(lot.openedAt)}</span>` : ''}${lot.closedAt ? `<span class="num" style="letter-spacing:0">closed ${tclock(lot.closedAt)}</span>` : ''}</div>
+    <h1>${esc(lot.title)}</h1>
+    <div class="meta">${lot.donor ? `<span>Donated by ${esc(lot.donor)}</span>` : ''}
+      <label>Opening <input class="num" id="lotOpening" value="${esc(lot.opening)}" ${editable ? '' : 'disabled'} inputmode="decimal"></label>
+      <label>Increment <input class="num" id="lotInc" value="${esc(lot.increment)}" ${editable ? '' : 'disabled'} inputmode="decimal"></label></div>
+  </div><div class="body">`;
+  if (open && open.id !== lot.id) html += `<div class="msg warn">Lot ${esc(open.number)} is open right now. <button class="linkbtn" data-action="goto-open">Go to it</button></div>`;
+
+  if (lot.status === 'ready') {
+    html += `<div class="high"><div><div class="lbl">Opening bid</div><div class="amt">${money(lot.opening)}</div></div><div class="who hint">Bids go up by ${money(lot.increment)}</div></div>
+      <div class="row"><button class="btn primary big" data-action="open-lot" ${open ? 'disabled' : ''}>Open bidding on lot ${esc(lot.number)}</button>
+      <span class="hint">Starts the clock for this lot, so its audio and transcript can be found later.</span></div>`;
+  } else if (lot.status === 'open') {
+    html += `<div class="high"><div><div class="lbl">${h ? 'High bid' : 'No bids yet · opening'}</div><div class="amt">${money(h ? h.amount : lot.opening)}</div></div>
+      <div class="who">${h ? `<div class="paddle">#${esc(h.paddle)}</div><div class="name">${esc(pname(h.paddle)) || '&nbsp;'}</div>` : ''}</div></div>
+      <form class="bid" id="bidForm" autocomplete="off">
+        <label class="field"><span>Paddle</span><input id="bidPaddle" inputmode="numeric" placeholder="42"></label>
+        <label class="field"><span>Amount</span><input id="bidAmount" inputmode="decimal" value="${nextAmount(lot)}"></label>
+        <button class="btn primary go" type="submit">Record bid</button>
+      </form>
+      <div class="row"><span class="hint">Amount presets:</span>
+        <button class="btn" data-action="amt" data-mult="1">+${money(lot.increment)}</button>
+        <button class="btn" data-action="amt" data-mult="2">+${money(lot.increment * 2)}</button>
+        <button class="btn" data-action="amt" data-mult="5">+${money(lot.increment * 5)}</button>
+        <span class="spacer"></span><span class="hint"><span class="kbd">Enter</span> record · <span class="kbd">⌥ Z</span> undo</span></div>
+      <div id="lotMsg" class="msg" hidden></div>
+      <div class="row">
+        <button class="btn" data-action="undo" ${bids.some(b => !b.voided) ? '' : 'disabled'}>Undo last bid</button>
+        <span class="spacer"></span>
+        <button class="btn danger" data-action="pass-ask">Pass (unsold)</button>
+        <button class="btn ok big" data-action="sold-ask" ${h ? '' : 'disabled'}>Sold${h ? ` to #${esc(h.paddle)}` : ''}</button>
+      </div>`;
+    if (pendingConfirm === 'sold' && h) html += `<div class="confirm"><strong>Sell lot ${esc(lot.number)} to paddle #${esc(h.paddle)}${pname(h.paddle) ? ' (' + esc(pname(h.paddle)) + ')' : ''} for ${money(h.amount)}?</strong>
+      <div class="row"><button class="btn ok big" data-action="sold-do">Confirm sale</button><button class="btn" data-action="cancel">Not yet</button></div></div>`;
+    if (pendingConfirm === 'pass') html += `<div class="confirm"><strong>Close lot ${esc(lot.number)} as unsold?</strong>${h ? `<span>The high bid of ${money(h.amount)} from #${esc(h.paddle)} will not win.</span>` : ''}
+      <div class="row"><button class="btn danger" data-action="pass-do">Close as unsold</button><button class="btn" data-action="cancel">Keep bidding</button></div></div>`;
+  } else {
+    html += lot.status === 'sold'
+      ? `<div class="high"><div><div class="lbl">Sold for</div><div class="amt">${money(lot.winnerAmount)}</div></div><div class="who"><div class="paddle">#${esc(lot.winnerPaddle)}</div><div class="name">${esc(pname(lot.winnerPaddle)) || '&nbsp;'}</div></div></div>`
+      : `<div class="high"><div><div class="lbl">Unsold</div><div class="amt">—</div></div><div class="who hint">Closed as passed</div></div>`;
+    html += `<div class="row"><button class="btn" data-action="reopen-ask" ${open ? 'disabled' : ''}>Reopen this lot</button><span class="hint">Use this if the sale was called in error.</span></div>`;
+    if (pendingConfirm === 'reopen') html += `<div class="confirm"><strong>Reopen lot ${esc(lot.number)}?</strong><span>The result is cleared and bidding continues from the current high bid.</span>
+      <div class="row"><button class="btn primary" data-action="reopen-do">Reopen</button><button class="btn" data-action="cancel">Leave it closed</button></div></div>`;
+  }
+
+  html += `<div><div class="sec-h" style="margin-bottom:6px">Bid history · ${bids.filter(b => !b.voided).length} bids</div>
+    ${bids.length ? `<div class="tablewrap"><table><thead><tr><th>Time</th><th>Paddle</th><th>Name</th><th class="r">Amount</th><th></th></tr></thead><tbody>
+    ${[...bids].reverse().map(b => `<tr class="${b.voided ? 'void' : ''}"><td class="num">${tclock(b.at)}</td><td class="num">#${esc(b.paddle)}</td><td>${esc(pname(b.paddle))}${b.source === 'transcript' ? ' <span class="src">heard</span>' : ''}</td><td class="r num">${money(b.amount)}</td>
+      <td class="r">${lot.status === 'open' ? `<button class="linkbtn" data-action="${b.voided ? 'restore' : 'void'}" data-bid="${b.id}">${b.voided ? 'Restore' : 'Remove'}</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>` : '<p class="hint" style="margin:0">No bids recorded.</p>'}</div></div>`;
+  panel.innerHTML = html;
+  if (lot.status === 'open') setTimeout(() => $('#bidPaddle')?.focus(), 0);
+}
+
+$('#lotPanel').addEventListener('change', e => {
+  const lot = lotById(state.selectedLotId); if (!lot) return;
+  if (e.target.id !== 'lotOpening' && e.target.id !== 'lotInc') return;
+  if (e.target.id === 'lotOpening') { const v = parseMoney(e.target.value); if (v >= 0) lot.opening = v; }
+  if (e.target.id === 'lotInc') { const v = parseMoney(e.target.value); if (v > 0) lot.increment = v; }
+  save(); renderLotPanel();
+});
+$('#lotPanel').addEventListener('submit', e => {
+  e.preventDefault();
+  addBid($('#bidPaddle').value, $('#bidAmount').value, 'manual');
+});
+$('#lotPanel').addEventListener('click', e => {
+  const b = e.target.closest('[data-action]'); if (!b) return;
+  const lot = lotById(state.selectedLotId); const a = b.dataset.action;
+  if (a === 'goto-open') { state.selectedLotId = openLot().id; pendingConfirm = null; renderAuction(); return; }
+  if (!lot) return;
+  if (a === 'open-lot') {
+    if (openLot()) return;
+    lot.status = 'open'; lot.openedAt = lot.openedAt || Date.now(); recentKeys.clear(); suggestions = [];
+    save(true); renderAuction();
+    if (!engine.running) $('#engineStatus').textContent = 'Lot is open. Start the transcript if you want bid suggestions.';
+  }
+  if (a === 'amt') { const h = highBid(lot.id); const base = h ? h.amount : Number(lot.opening) - Number(lot.increment); $('#bidAmount').value = base + Number(lot.increment) * Number(b.dataset.mult); $('#bidPaddle').focus(); }
+  if (a === 'undo') undoBid();
+  if (a === 'void' || a === 'restore') { const bid = state.bids.find(x => x.id === b.dataset.bid); if (bid) { bid.voided = a === 'void'; save(true); renderLotPanel(); renderLotList(); } }
+  if (a === 'sold-ask') { pendingConfirm = 'sold'; renderLotPanel(); }
+  if (a === 'pass-ask') { pendingConfirm = 'pass'; renderLotPanel(); }
+  if (a === 'reopen-ask') { pendingConfirm = 'reopen'; renderLotPanel(); }
+  if (a === 'cancel') { pendingConfirm = null; renderLotPanel(); }
+  if (a === 'sold-do') { const h = highBid(lot.id); if (!h) return; Object.assign(lot, { status: 'sold', closedAt: Date.now(), winnerPaddle: h.paddle, winnerAmount: h.amount }); closeOut(lot); }
+  if (a === 'pass-do') { Object.assign(lot, { status: 'passed', closedAt: Date.now(), winnerPaddle: null, winnerAmount: null }); closeOut(lot); }
+  if (a === 'reopen-do') { Object.assign(lot, { status: 'open', closedAt: null, winnerPaddle: null, winnerAmount: null }); pendingConfirm = null; save(true); renderAuction(); }
+});
+function closeOut(lot) {
+  pendingConfirm = null; suggestions = []; save(true);
+  const nxt = sortedLots().find(l => l.status === 'ready' && l.id !== lot.id);
+  renderLotList(); renderLotPanel(); renderSuggestions();
+  if (nxt) { const el = document.createElement('div'); el.className = 'msg ok'; el.innerHTML = `Lot ${esc(lot.number)} ${lot.status === 'sold' ? 'sold' : 'closed'}. Next up: <button class="linkbtn" data-action="goto" data-lot="${nxt.id}">Lot ${esc(nxt.number)} · ${esc(nxt.title)}</button>`;
+    $('#lotPanel .body').prepend(el);
+    el.querySelector('button').addEventListener('click', () => { state.selectedLotId = nxt.id; save(); renderAuction(); }); }
+}
+
+function addBid(paddleRaw, amountRaw, source) {
+  const lot = openLot();
+  if (!lot) { flash('Open a lot before recording bids.'); return false; }
+  const paddle = String(paddleRaw ?? '').trim().replace(/^#/, '');
+  if (!/^\d{1,5}$/.test(paddle)) { flash('Enter the paddle number (digits only).'); $('#bidPaddle')?.focus(); return false; }
+  const amount = parseMoney(amountRaw);
+  if (!(amount > 0)) { flash('Enter the bid amount.'); $('#bidAmount')?.focus(); return false; }
+  const h = highBid(lot.id);
+  if (h && amount <= h.amount) { flash(`That bid must be above the current ${money(h.amount)}. Check the amount.`); $('#bidAmount')?.focus(); return false; }
+  state.bids.push({ id: uid(), lotId: lot.id, paddle, amount, at: Date.now(), source, voided: false });
+  save(true);
+  state.selectedLotId = lot.id;
+  renderLotPanel(); renderLotList();
+  const notes = [];
+  if (h && h.paddle === paddle) notes.push(`#${paddle} already held the high bid.`);
+  if (Object.keys(state.paddles).length && !state.paddles[paddle]) notes.push(`Paddle #${paddle} is not on the paddle list.`);
+  if (!h && amount < Number(lot.opening)) notes.push(`That is below the ${money(lot.opening)} opening bid.`);
+  flash(notes.length ? notes.join(' ') : `Recorded #${paddle} at ${money(amount)}.`, notes.length ? 'warn' : 'ok');
+  suggestions = suggestions.filter(s => s.amount > amount);
+  renderSuggestions();
+  return true;
+}
+function undoBid() {
+  const lot = openLot(); if (!lot) return;
+  const last = lotBids(lot.id).pop(); if (!last) return;
+  last.voided = true; save(true); renderLotPanel(); renderLotList();
+  flash(`Removed #${last.paddle} at ${money(last.amount)}. Restore it from the history if needed.`, 'warn');
+}
+
+document.addEventListener('keydown', e => {
+  if (state.view !== 'auction') return;
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { if (suggestions[0]) { e.preventDefault(); acceptSuggestion(suggestions[0].id); } return; }
+  if (e.key === 'Escape' && suggestions[0]) { e.preventDefault(); dismissSuggestion(suggestions[0].id); return; }
+  if (e.altKey && e.code === 'KeyZ') { e.preventDefault(); undoBid(); }
+});
+
+/* ---------- Suggestions ---------- */
+let suggestions = [];
+const recentKeys = new Set();
+function suggestFrom(text) {
+  const lot = openLot(); if (!lot || !window.AuctionParser) return;
+  const h = highBid(lot.id);
+  const found = AuctionParser.parseBidPhrases(text, { high: h ? h.amount : 0, next: nextAmount(lot), opening: lot.opening, increment: lot.increment });
+  let changed = false;
+  for (const f of found) {
+    const key = f.paddle + '@' + f.amount;
+    if (recentKeys.has(key)) continue;
+    if (h && h.paddle === f.paddle && h.amount >= f.amount) continue;
+    if (h && f.amount <= h.amount) continue;
+    recentKeys.add(key);
+    suggestions = suggestions.filter(s => s.paddle !== f.paddle || s.amount > f.amount);
+    suggestions.unshift({ id: uid(), paddle: f.paddle, amount: f.amount, assumed: f.assumed, sold: f.sold, heard: text.trim().slice(0, 120), at: Date.now() });
+    changed = true;
+  }
+  if (changed) { suggestions = suggestions.slice(0, 4); renderSuggestions(); }
+}
+function renderSuggestions() {
+  const box = $('#suggs');
+  $('#suggEmpty').hidden = suggestions.length > 0;
+  box.innerHTML = suggestions.map((s, i) => `<div class="sugg" data-sid="${s.id}">
+    <div class="what"><span>Paddle <span class="num">#${esc(s.paddle)}</span></span><span class="num">${money(s.amount)}</span>${s.assumed ? '<span class="tag">amount guessed</span>' : ''}${pname(s.paddle) ? `<span class="hint">${esc(pname(s.paddle))}</span>` : ''}</div>
+    <div class="heard">“${esc(s.heard)}”</div>
+    <div class="row"><button class="btn primary" data-sact="accept">Record bid${i === 0 ? ' <span class="kbd">⌘↵</span>' : ''}</button><button class="btn" data-sact="edit">Edit first</button><button class="btn" data-sact="dismiss">Dismiss</button>
+    ${s.sold ? '<button class="btn ok" data-sact="sold">Sold?</button>' : ''}</div></div>`).join('');
+}
+$('#suggs').addEventListener('click', e => {
+  const b = e.target.closest('[data-sact]'); if (!b) return;
+  const id = b.closest('.sugg').dataset.sid; const s = suggestions.find(x => x.id === id); if (!s) return;
+  if (b.dataset.sact === 'accept') acceptSuggestion(id);
+  if (b.dataset.sact === 'dismiss') dismissSuggestion(id);
+  if (b.dataset.sact === 'edit') { $('#bidPaddle').value = s.paddle; $('#bidAmount').value = s.amount; $('#bidAmount').focus(); dismissSuggestion(id); }
+  if (b.dataset.sact === 'sold') { const lot = openLot(); if (lot) { state.selectedLotId = lot.id; pendingConfirm = 'sold'; renderLotPanel(); } }
+});
+function acceptSuggestion(id) {
+  const s = suggestions.find(x => x.id === id); if (!s) return;
+  const lot = openLot(); if (lot && state.selectedLotId !== lot.id) { state.selectedLotId = lot.id; renderLotPanel(); }
+  suggestions = suggestions.filter(x => x.id !== id);
+  if (!addBid(s.paddle, s.amount, 'transcript')) { $('#bidPaddle').value = s.paddle; $('#bidAmount').value = s.amount; }
+  renderSuggestions();
+}
+function dismissSuggestion(id) { suggestions = suggestions.filter(x => x.id !== id); renderSuggestions(); }
+setInterval(() => { const n = suggestions.length; suggestions = suggestions.filter(s => Date.now() - s.at < 30000); if (n !== suggestions.length) renderSuggestions(); }, 3000);
+
+/* ---------- Transcript ---------- */
+let interimText = '';
+function addTranscript(text, eng) {
+  text = text.trim(); if (!text) return;
+  const lot = openLot();
+  state.transcript.push({ at: Date.now(), lotId: lot ? lot.id : null, text, engine: eng });
+  if (state.transcript.length > 5000) state.transcript.splice(0, state.transcript.length - 5000);
+  save(); renderTranscript(); suggestFrom(text);
+}
+function highlight(t) { return esc(t).replace(/(\$?\b\d[\d,.]*\b|\b(?:paddle|number|bidder|sold)\b)/gi, '<mark>$1</mark>'); }
+function renderTranscript() {
+  const lot = lotById(state.selectedLotId);
+  const lines = state.transcript.filter(l => lot && l.lotId === lot.id).slice(-80);
+  const box = $('#tlog');
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  box.innerHTML = (lines.length || interimText) ? lines.map(l => `<div class="tline"><time>${tclock(l.at).replace(/ [AP]M/, '')}</time><div>${highlight(l.text)}<span class="eng">${l.engine === 'whisper' ? 'whisper' : ''}</span></div></div>`).join('')
+    + (interimText && lot && openLot()?.id === lot.id ? `<div class="tline interim"><time>…</time><div>${esc(interimText)}</div></div>` : '')
+    : '<p class="empty" style="padding:0">Nothing transcribed for this lot yet.</p>';
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+/* ---------- Speech engines ---------- */
+const engine = { running: false, active: null };
+function setEngineStatus(text, kind) {
+  $('#engineStatus').textContent = text;
+  const pill = $('#hdrEngine'); pill.className = 'pill ' + (kind || '');
+  pill.lastElementChild.textContent = !engine.running ? 'Transcript off' : engine.active === 'whisper' ? 'Whisper (offline)' : 'Chrome speech';
+  $('#engineBtn').textContent = engine.running ? 'Stop' : 'Start';
+  $('#engineSel').value = engine.running ? engine.active : state.settings.engine;
+}
+$('#engineSel').value = state.settings.engine;
+$('#autoFallback').checked = state.settings.autoFallback;
+$('#autoFallback').addEventListener('change', e => { state.settings.autoFallback = e.target.checked; save(); });
+$('#engineSel').addEventListener('change', e => { state.settings.engine = e.target.value; save(); if (engine.running) { stopEngine(); startEngine(e.target.value); } });
+$('#engineBtn').addEventListener('click', () => { if (engine.running) { stopEngine(); setEngineStatus('Stopped. Bids can still be recorded by hand.'); } else startEngine(state.settings.engine); });
+function startEngine(which) { engine.running = true; engine.active = which; which === 'whisper' ? startWhisper() : startChrome(); }
+function stopEngine() { engine.running = false; stopChrome(); stopWhisper(); interimText = ''; renderTranscript(); setEngineStatus($('#engineStatus').textContent); }
+function engineFailed(reason) {
+  if (!engine.running) return;
+  if (engine.active === 'chrome' && state.settings.autoFallback) {
+    stopChrome(); engine.active = 'whisper';
+    setEngineStatus(reason + ' Switching to offline Whisper…', 'warn');
+    startWhisper(true);
+  } else { engine.running = false; stopChrome(); stopWhisper(); setEngineStatus(reason + ' Keep recording bids by hand.', 'bad'); }
+}
+
+// Option 1: Chrome speech recognition
+let rec = null, chromeFails = [], lastErr = '', lastResultAt = 0;
+function startChrome() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { engineFailed('This browser has no built-in speech recognition (use Chrome on the MacBook).'); return; }
+  if (!navigator.onLine) { engineFailed('No internet connection, and Chrome speech needs it.'); return; }
+  chromeFails = []; lastResultAt = Date.now();
+  rec = new SR(); rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+  rec.onstart = () => setEngineStatus('Listening with Chrome speech. Uses the Mac’s current input device.', 'live');
+  rec.onresult = e => {
+    lastResultAt = Date.now(); let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) addTranscript(r[0].transcript, 'chrome'); else interim += r[0].transcript;
+    }
+    interimText = interim; renderTranscript();
+    if (interim) suggestFrom(interim);
+  };
+  rec.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    lastErr = e.error;
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { engineFailed('Microphone access was blocked. Allow it in Chrome’s address bar.'); return; }
+    chromeFails.push(Date.now());
+  };
+  rec.onend = () => {
+    if (!engine.running || engine.active !== 'chrome' || !rec) return;
+    chromeFails = chromeFails.filter(t => Date.now() - t < 30000);
+    if (chromeFails.length >= 3) { engineFailed(`Chrome speech keeps dropping (${lastErr}).`); return; }
+    setTimeout(() => { if (engine.running && engine.active === 'chrome' && rec) try { rec.start(); } catch {} }, 250);
+  };
+  try { rec.start(); } catch (err) { engineFailed('Chrome speech could not start.'); }
+}
+function stopChrome() { if (rec) { const r = rec; rec = null; try { r.abort(); } catch {} } interimText = ''; }
+window.addEventListener('offline', () => { if (engine.running && engine.active === 'chrome') engineFailed('Wifi dropped.'); });
+
+// Option 2: Whisper in the browser (offline once the model is loaded)
+const WHISPER_MODEL = 'Xenova/whisper-tiny.en';
+let asr = null, asrLoading = null;
+function loadWhisper() {
+  if (asr) return Promise.resolve(asr);
+  if (asrLoading) return asrLoading;
+  $('#modelState').textContent = 'Offline fallback: downloading model…'; $('#modelMeter').hidden = false; $('#modelLoad').hidden = true;
+  const prog = {};
+  asrLoading = (async () => {
+    const T = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2');
+    T.env.allowLocalModels = false;
+    asr = await T.pipeline('automatic-speech-recognition', WHISPER_MODEL, {
+      progress_callback: p => {
+        if (p.status === 'progress' && p.total) { prog[p.file] = [p.loaded, p.total];
+          const v = Object.values(prog); const pct = 100 * v.reduce((a, x) => a + x[0], 0) / v.reduce((a, x) => a + x[1], 0);
+          $('#modelMeter i').style.width = pct.toFixed(0) + '%'; $('#modelState').textContent = `Offline fallback: downloading ${pct.toFixed(0)}%`; }
+      }
+    });
+    $('#modelState').textContent = 'Offline fallback: ready ✓ (works without wifi until you reload the page)'; $('#modelMeter').hidden = true;
+    return asr;
+  })();
+  asrLoading.catch(err => { console.error(err); asrLoading = null; $('#modelState').textContent = 'Offline fallback: download failed. Check wifi and try again.'; $('#modelMeter').hidden = true; $('#modelLoad').hidden = false; });
+  return asrLoading;
+}
+$('#modelLoad').addEventListener('click', () => loadWhisper());
+
+let wStream = null, wCtx = null, wBufs = [], wTimer = null, wBusy = false;
+async function startWhisper(fromFallback) {
+  setEngineStatus((fromFallback ? 'Chrome speech failed. ' : '') + 'Starting offline Whisper…', 'warn');
+  try { await loadWhisper(); } catch { engineFailed('The offline model is not loaded and could not download.'); return; }
+  if (!engine.running || engine.active !== 'whisper') return;
+  try {
+    wStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: state.settings.micId ? { exact: state.settings.micId } : undefined, channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+  } catch { engine.running = false; setEngineStatus('Microphone access was blocked. Allow it in Chrome’s address bar.', 'bad'); return; }
+  wCtx = new AudioContext({ sampleRate: 16000 });
+  const src = wCtx.createMediaStreamSource(wStream);
+  const proc = wCtx.createScriptProcessor(4096, 1, 1);
+  const mute = wCtx.createGain(); mute.gain.value = 0;
+  proc.onaudioprocess = e => wBufs.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  src.connect(proc); proc.connect(mute); mute.connect(wCtx.destination);
+  wTimer = setInterval(whisperTick, 4000);
+  setEngineStatus((fromFallback ? 'Chrome speech failed, now ' : '') + 'Listening with offline Whisper. Text arrives every few seconds.', 'live');
+}
+const HALLUCINATIONS = /^(\[.*\]|\(.*\)|thank you\.?|thanks for watching\.?|you|\.+)$/i;
+async function whisperTick() {
+  if (wBusy || !wBufs.length) return;
+  const len = wBufs.reduce((a, b) => a + b.length, 0);
+  let audio = new Float32Array(len); let o = 0; for (const b of wBufs) { audio.set(b, o); o += b.length; } wBufs = [];
+  if (audio.length > 16000 * 12) audio = audio.subarray(audio.length - 16000 * 12);
+  let sum = 0; for (let i = 0; i < audio.length; i += 4) sum += audio[i] * audio[i];
+  if (Math.sqrt(sum / (audio.length / 4)) < 0.006) return;
+  wBusy = true;
+  try { const out = await asr(audio); const text = (out && out.text || '').trim(); if (text && !HALLUCINATIONS.test(text)) addTranscript(text, 'whisper'); }
+  catch (e) { console.warn(e); }
+  finally { wBusy = false; }
+}
+function stopWhisper() {
+  clearInterval(wTimer); wTimer = null; wBufs = [];
+  if (wStream) wStream.getTracks().forEach(t => t.stop()); wStream = null;
+  if (wCtx) wCtx.close().catch(() => {}); wCtx = null;
+}
+// Preload the fallback model in the background while wifi is good.
+if (navigator.onLine) setTimeout(() => loadWhisper().catch(() => {}), 2500);
+
+/* ---------- Lots & paddles view ---------- */
+function renderLots() {
+  $('#evInput').value = state.eventName;
+  $('#exampleBanner').hidden = !state.lots.some(l => l.example);
+  $('#lotTable').innerHTML = `<thead><tr><th>Lot</th><th>Item</th><th>Donor</th><th class="r">Opening</th><th class="r">Increment</th><th>Status</th><th></th></tr></thead><tbody>` +
+    sortedLots().map(l => { const locked = lotBids(l.id).length > 0 || l.status !== 'ready'; return `<tr data-lot="${l.id}">
+      <td><input id="n-${l.id}" data-f="number" value="${esc(l.number)}" style="max-width:64px" class="num"></td>
+      <td><input id="t-${l.id}" data-f="title" value="${esc(l.title)}"></td>
+      <td><input id="d-${l.id}" data-f="donor" value="${esc(l.donor)}"></td>
+      <td class="r"><input id="o-${l.id}" data-f="opening" value="${esc(l.opening)}" class="num" inputmode="decimal"></td>
+      <td class="r"><input id="i-${l.id}" data-f="increment" value="${esc(l.increment)}" class="num" inputmode="decimal"></td>
+      <td><span class="tag ${l.status}">${l.status}</span></td>
+      <td class="r">${locked ? '' : `<button class="linkbtn" data-action="del-lot">Delete</button>`}</td></tr>`; }).join('') + '</tbody>';
+  $('#paddleText').value = Object.entries(state.paddles).sort((a, b) => Number(a[0]) - Number(b[0])).map(([p, n]) => `${p}, ${n}`).join('\n');
+  $('#paddleCount').textContent = Object.keys(state.paddles).length ? `${Object.keys(state.paddles).length} paddles on the list` : 'No paddle list yet';
+}
+$('#evInput').addEventListener('input', e => { state.eventName = e.target.value || 'Gala'; $('#evName').textContent = state.eventName; save(); });
+$('#lotTable').addEventListener('change', e => {
+  const tr = e.target.closest('tr[data-lot]'); const f = e.target.dataset.f; if (!tr || !f) return;
+  const lot = lotById(tr.dataset.lot);
+  lot[f] = (f === 'opening' || f === 'increment') ? (parseMoney(e.target.value) || 0) : e.target.value.trim();
+  if (f === 'title' || f === 'donor') lot.example = false;
+  save();
+});
+$('#lotTable').addEventListener('click', e => {
+  if (e.target.dataset.action !== 'del-lot') return;
+  const id = e.target.closest('tr').dataset.lot; state.lots = state.lots.filter(l => l.id !== id); save(true); renderLots();
+});
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-action]')?.dataset.action; if (!a) return;
+  if (a === 'add-lot') { const max = Math.max(0, ...state.lots.map(l => parseFloat(l.number) || 0));
+    state.lots.push({ id: uid(), number: String(max + 1), title: 'New item', donor: '', opening: 100, increment: 25, status: 'ready', openedAt: null, closedAt: null, winnerPaddle: null, winnerAmount: null });
+    save(true); renderLots(); }
+  if (a === 'clear-examples') { state.lots = state.lots.filter(l => !l.example || state.bids.some(b => b.lotId === l.id)); save(true); renderLots(); }
+  if (a === 'save-paddles') {
+    const map = {}; let bad = 0;
+    for (const line of $('#paddleText').value.split(/\r?\n/)) { const t = line.trim(); if (!t) continue;
+      const m = t.match(/^#?\s*(\d{1,5})\s*[,\t;:-]?\s*(.*)$/); if (m) map[m[1]] = m[2].replace(/^"|"$/g, '').trim(); else bad++; }
+    state.paddles = map; save(true); renderLots();
+    $('#paddleCount').textContent = `${Object.keys(map).length} paddles saved` + (bad ? ` · ${bad} lines skipped (no paddle number)` : '');
+  }
+  if (a === 'export-json') download(`auction-backup-${stamp()}.json`, JSON.stringify(state, null, 2), 'application/json');
+  if (a === 'reset-ask') $('#resetConfirm').hidden = false;
+  if (a === 'reset-cancel') $('#resetConfirm').hidden = true;
+  if (a === 'reset-do') { stopEngine(); state = freshState(); state.lots = []; save(true); $('#resetConfirm').hidden = true; renderLots(); renderAuction(); }
+  if (a === 'sync') doSync();
+  if (a === 'export-results') download(`auction-results-${stamp()}.csv`, resultsCsv(), 'text/csv');
+  if (a === 'export-bids') download(`auction-bids-${stamp()}.csv`, bidsCsv(), 'text/csv');
+  if (a === 'export-paddles') download(`auction-paddle-totals-${stamp()}.csv`, paddleCsv(), 'text/csv');
+  if (a === 'export-transcript') download(`auction-transcript-${stamp()}.csv`, transcriptCsv(), 'text/csv');
+});
+
+function parseCsv(text) {
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) { const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true; else if (c === ',') { row.push(f); f = ''; } else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; } else f += c; }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => x.trim()));
+}
+$('#lotCsv').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return; const rows = parseCsv(await file.text()); e.target.value = '';
+  if (rows.length && isNaN(parseFloat(rows[0][3]))) rows.shift();
+  let added = 0;
+  for (const r of rows) { if (!r[1]) continue;
+    state.lots.push({ id: uid(), number: (r[0] || '').trim() || String(state.lots.length + 1), title: r[1].trim(), donor: (r[2] || '').trim(), opening: parseMoney(r[3]) || 0, increment: parseMoney(r[4]) || 25, status: 'ready', openedAt: null, closedAt: null, winnerPaddle: null, winnerAmount: null }); added++; }
+  save(true); renderLots();
+  $('#paddleCount').textContent = ''; $('#exampleBanner').hidden = !state.lots.some(l => l.example);
+  if (added && state.lots.some(l => l.example)) $('#exampleBanner').firstChild.textContent = `Imported ${added} lots. The example lots are still here. `;
+});
+$('#jsonIn').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return; e.target.value = '';
+  try { const data = JSON.parse(await file.text()); if (!Array.isArray(data.lots)) throw 0; stopEngine(); state = Object.assign(freshState(), data); save(true); renderLots(); renderAuction(); $('#paddleCount').textContent = 'Backup restored.'; }
+  catch { $('#paddleCount').textContent = 'That file is not an auction backup.'; }
+});
+
+/* ---------- Results ---------- */
+function paddleTotals() {
+  const t = {};
+  for (const l of state.lots) if (l.status === 'sold') { const p = l.winnerPaddle; (t[p] ||= { paddle: p, lots: [], total: 0 }); t[p].lots.push(l); t[p].total += Number(l.winnerAmount); }
+  return Object.values(t).sort((a, b) => Number(a.paddle) - Number(b.paddle));
+}
+function renderResults() {
+  const sold = state.lots.filter(l => l.status === 'sold');
+  const total = sold.reduce((a, l) => a + Number(l.winnerAmount), 0);
+  const pt = paddleTotals();
+  $('#resultsBody').innerHTML = `
+    <div class="tiles">
+      <div class="card tile"><div class="l">Total raised</div><div class="v">${money(total)}</div></div>
+      <div class="card tile"><div class="l">Lots sold</div><div class="v">${sold.length}<span class="hint"> / ${state.lots.length}</span></div></div>
+      <div class="card tile"><div class="l">Bids recorded</div><div class="v">${state.bids.filter(b => !b.voided).length}</div></div>
+      <div class="card tile"><div class="l">Winning paddles</div><div class="v">${pt.length}</div></div>
+    </div>
+    <div class="row"><button class="btn primary" data-action="export-results">Download results CSV</button><button class="btn" data-action="export-paddles">Paddle totals CSV</button><button class="btn" data-action="export-bids">All bids CSV</button><button class="btn" data-action="export-transcript">Transcript CSV</button></div>
+    <div class="card pad"><div class="sec-h">Checkout · what each paddle owes</div><div class="tablewrap"><table>
+      <thead><tr><th>Paddle</th><th>Name</th><th>Lots won</th><th class="r">Total</th></tr></thead><tbody>
+      ${pt.map(p => `<tr><td class="num">#${esc(p.paddle)}</td><td>${esc(pname(p.paddle))}</td><td>${p.lots.map(l => `Lot ${esc(l.number)} (${money(l.winnerAmount)})`).join(', ')}</td><td class="r num"><strong>${money(p.total)}</strong></td></tr>`).join('') || '<tr><td colspan="4" class="hint">No lots sold yet.</td></tr>'}
+      </tbody></table></div></div>
+    <div class="card pad"><div class="sec-h">By lot</div><div class="tablewrap"><table>
+      <thead><tr><th>Lot</th><th>Item</th><th>Status</th><th>Winner</th><th class="r">Price</th><th class="r">Bids</th><th>Opened</th><th>Closed</th></tr></thead><tbody>
+      ${sortedLots().map(l => `<tr><td class="num">${esc(l.number)}</td><td>${esc(l.title)}</td><td><span class="tag ${l.status}">${l.status}</span></td><td>${l.winnerPaddle ? `#${esc(l.winnerPaddle)} ${esc(pname(l.winnerPaddle))}` : ''}</td><td class="r num">${l.winnerAmount != null ? money(l.winnerAmount) : ''}</td><td class="r num">${lotBids(l.id).length}</td><td class="num">${l.openedAt ? tclock(l.openedAt) : ''}</td><td class="num">${l.closedAt ? tclock(l.closedAt) : ''}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+}
+const csvCell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+const toCsv = rows => rows.map(r => r.map(csvCell).join(',')).join('\n');
+const iso = ms => ms ? new Date(ms).toLocaleString('en-US') : '';
+const resultsCsv = () => toCsv([['lot', 'item', 'donor', 'status', 'winning_paddle', 'winner_name', 'price', 'bids', 'opened', 'closed'],
+  ...sortedLots().map(l => [l.number, l.title, l.donor, l.status, l.winnerPaddle, pname(l.winnerPaddle), l.winnerAmount, lotBids(l.id).length, iso(l.openedAt), iso(l.closedAt)])]);
+const bidsCsv = () => toCsv([['lot', 'item', 'time', 'paddle', 'name', 'amount', 'entered_from', 'removed'],
+  ...state.bids.map(b => { const l = lotById(b.lotId) || {}; return [l.number, l.title, iso(b.at), b.paddle, pname(b.paddle), b.amount, b.source === 'transcript' ? 'transcript suggestion' : 'typed', b.voided ? 'yes' : '']; })]);
+const paddleCsv = () => toCsv([['paddle', 'name', 'lots_won', 'total'], ...paddleTotals().map(p => [p.paddle, pname(p.paddle), p.lots.map(l => l.number).join(' '), p.total])]);
+const transcriptCsv = () => toCsv([['time', 'lot', 'source', 'text'],
+  ...state.transcript.map(t => [iso(t.at), (lotById(t.lotId) || {}).number || '', t.engine === 'whisper' ? 'live whisper' : 'live chrome', t.text]),
+  ...state.srt.map(s => [state.recStartAt ? iso(state.recStartAt + s.start * 1000) : mmss(s.start) + ' into recording', (lotForTime(s.start) || {}).number || '', 'post-event whisper', s.text])]);
+const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+
+/* ---------- Audio & transcript view ---------- */
+let audioUrl = null, clipStopAt = null;
+const player = $('#player');
+function toLocalInput(ms) { const d = new Date(ms); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+function lotForTime(sec) {
+  if (!state.recStartAt) return null; const at = state.recStartAt + sec * 1000;
+  return state.lots.find(l => l.openedAt && at >= l.openedAt - 15000 && at <= (l.closedAt || l.openedAt + 3600000) + 15000) || null;
+}
+function renderAudio() {
+  $('#recStart').value = state.recStartAt ? toLocalInput(state.recStartAt) : '';
+  const opened = sortedLots().filter(l => l.openedAt);
+  $('#syncLot').innerHTML = opened.map(l => `<option value="${l.id}">Lot ${esc(l.number)} · ${esc(l.title)}</option>`).join('') || '<option value="">No lots opened yet</option>';
+  $('#clipTable').innerHTML = opened.length ? `<thead><tr><th>Lot</th><th>Item</th><th>In the recording</th><th>Result</th><th></th></tr></thead><tbody>${opened.map(l => {
+    const s = state.recStartAt ? (l.openedAt - state.recStartAt) / 1000 : null; const e = state.recStartAt && l.closedAt ? (l.closedAt - state.recStartAt) / 1000 : null;
+    return `<tr><td class="num">${esc(l.number)}</td><td>${esc(l.title)}</td><td class="num">${s != null ? `${mmss(s)} – ${e != null ? mmss(e) : '…'}` : '<span class="hint">set start time</span>'}</td>
+      <td>${l.status === 'sold' ? `#${esc(l.winnerPaddle)} · ${money(l.winnerAmount)}` : esc(l.status)}</td>
+      <td class="r"><button class="btn" data-play="${l.id}" ${s != null && audioUrl ? '' : 'disabled'}>Play clip</button></td></tr>`; }).join('')}</tbody>` : '<tbody><tr><td class="hint">Lots appear here once they have been opened during the auction.</td></tr></tbody>';
+  renderLotTranscripts();
+}
+$('#recStart').addEventListener('change', e => { const v = e.target.value; state.recStartAt = v ? new Date(v).getTime() : null; save(); renderAudio(); });
+$('#audioIn').addEventListener('change', e => { const f = e.target.files[0]; if (!f) return; setAudio(URL.createObjectURL(f), f.name); });
+function setAudio(url, name) {
+  if (audioUrl && audioUrl !== url) URL.revokeObjectURL(audioUrl);
+  audioUrl = url; player.src = url; player.hidden = false;
+  $('#audioName').textContent = `Loaded: ${name}. Files are not stored, so load it again after a page reload.`;
+  renderAudio();
+}
+function doSync() {
+  const lot = lotById($('#syncLot').value);
+  if (!lot || !audioUrl) { $('#audioName').textContent = 'Load the recording and pick a lot first.'; return; }
+  state.recStartAt = Math.round(lot.openedAt - player.currentTime * 1000); save(true); renderAudio();
+  $('#audioName').textContent = `Synced. The recording started at ${tclock(state.recStartAt)}.`;
+}
+$('#clipTable').addEventListener('click', e => {
+  const b = e.target.closest('[data-play]'); if (!b) return; const l = lotById(b.dataset.play);
+  const s = (l.openedAt - state.recStartAt) / 1000 - 5; clipStopAt = l.closedAt ? (l.closedAt - state.recStartAt) / 1000 + 8 : null;
+  player.currentTime = Math.max(0, s); player.play().catch(() => {});
+});
+player.addEventListener('timeupdate', () => { if (clipStopAt != null && player.currentTime >= clipStopAt) { player.pause(); clipStopAt = null; } });
+
+function parseSrt(text) {
+  const out = []; const toS = t => { const m = t.trim().replace(',', '.').match(/(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)/); return m ? (Number(m[1] || 0) * 3600 + Number(m[2]) * 60 + Number(m[3])) : null; };
+  for (const block of text.replace(/\r/g, '').split(/\n\s*\n/)) {
+    const lines = block.split('\n'); const i = lines.findIndex(l => l.includes('-->')); if (i < 0) continue;
+    const [a, b] = lines[i].split('-->'); const t = lines.slice(i + 1).join(' ').trim(); const s = toS(a); if (s == null || !t) continue;
+    out.push({ start: s, end: toS(b.split(' ').filter(Boolean)[0]) ?? s, text: t });
+  }
+  return out;
+}
+$('#srtIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return; e.target.value = '';
+  state.srt = parseSrt(await f.text()); save(true); renderLotTranscripts();
+});
+function renderLotTranscripts() {
+  const box = $('#lotTranscripts');
+  if (!state.srt.length) { box.innerHTML = ''; return; }
+  if (!state.recStartAt) { box.innerHTML = `<p class="msg warn">Imported ${state.srt.length} lines. Set the recording start time above so they can be filed by lot.</p>`; return; }
+  const groups = new Map(); let other = 0;
+  for (const s of state.srt) { const l = lotForTime(s.start); if (!l) { other++; continue; } if (!groups.has(l.id)) groups.set(l.id, []); groups.get(l.id).push(s); }
+  box.innerHTML = `<p class="hint">${state.srt.length} lines imported · ${other} outside any lot (speeches, intros).</p>` +
+    sortedLots().filter(l => groups.has(l.id)).map(l => `<details class="lt"><summary>Lot ${esc(l.number)} · ${esc(l.title)} <span class="hint">(${groups.get(l.id).length} lines)</span></summary><p>${groups.get(l.id).map(s => `[${mmss(s.start)}] ${esc(s.text)}`).join('\n')}</p></details>`).join('');
+}
+
+// Optional backup recording from the laptop mic
+let mr = null, mrChunks = [], mrStart = 0, mrTick = null, mrBlobUrl = null;
+async function listMics() {
+  try { const devs = await navigator.mediaDevices.enumerateDevices(); const mics = devs.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default');
+    $('#micSel').innerHTML = '<option value="">System default</option>' + mics.map(m => `<option value="${esc(m.deviceId)}">${esc(m.label || 'Microphone')}</option>`).join('');
+    $('#micSel').value = state.settings.micId || ''; } catch {}
+}
+$('#micSel').addEventListener('change', e => { state.settings.micId = e.target.value; save(); });
+listMics(); navigator.mediaDevices?.addEventListener?.('devicechange', listMics);
+$('#recBtn').addEventListener('click', async () => {
+  if (mr && mr.state === 'recording') { mr.stop(); return; }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: state.settings.micId ? { exact: state.settings.micId } : undefined } }); listMics(); }
+  catch { $('#recTime').textContent = 'Microphone access was blocked.'; return; }
+  mrChunks = []; mr = new MediaRecorder(stream); mrStart = Date.now();
+  mr.ondataavailable = e => { if (e.data.size) mrChunks.push(e.data); };
+  mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); clearInterval(mrTick); $('#recBtn').textContent = 'Start laptop recording';
+    if (mrBlobUrl) URL.revokeObjectURL(mrBlobUrl); mrBlobUrl = URL.createObjectURL(new Blob(mrChunks, { type: mr.mimeType || 'audio/webm' }));
+    $('#recSave').disabled = false; $('#recUse').disabled = false; $('#recTime').textContent = `Stopped · ${mmss((Date.now() - mrStart) / 1000)} recorded`; };
+  mr.start(1000); $('#recBtn').textContent = 'Stop laptop recording'; $('#recSave').disabled = true; $('#recUse').disabled = true;
+  mrTick = setInterval(() => { $('#recTime').textContent = '● ' + mmss((Date.now() - mrStart) / 1000); }, 1000);
+});
+$('#recSave').addEventListener('click', () => { if (!mrBlobUrl) return; const a = document.createElement('a'); a.href = mrBlobUrl; a.download = `laptop-recording-${stamp()}.webm`; a.click(); });
+$('#recUse').addEventListener('click', () => { if (!mrBlobUrl) return; state.recStartAt = mrStart; save(true); setAudio(mrBlobUrl, 'laptop recording'); });
+window.addEventListener('beforeunload', e => { if (mr && mr.state === 'recording') { e.preventDefault(); e.returnValue = ''; } });
+
+/* ---------- Boot ---------- */
+setEngineStatus('Off. Start it when the auctioneer takes the stage.');
+setView(state.view || 'auction');
+</script>
+</body>
+</html>
