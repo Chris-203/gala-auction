@@ -47,6 +47,9 @@
     t = t.replace(/(\d+)\s+hundred\b/g, (m, n) => String(parseInt(n, 10) * 100));
     t = t.replace(/\bno\.\s*(\d)/g, 'number $1');
     t = t.replace(/#\s*(\d)/g, 'number $1');
+    // Speech engines often mishear "bidder" and "paddle"; only fix them when a number follows.
+    t = t.replace(/\b(?:bitters?|betters?|butter|biters?|biders?|beater|bidda|bit her|bid her|bid or)(?:'s)?(?=\s+(?:number\s+)?\d)/g, 'bidder');
+    t = t.replace(/\b(?:battle|paddled|puddle|pedal|peddle|petal|padel|paddel)(?:'s)?(?=\s+(?:number\s+)?\d)/g, 'paddle');
     return t.replace(/\s+/g, ' ');
   }
 
@@ -54,6 +57,7 @@
   const TO_RE = /\$?\s?(\d{2,7})(?:\s*dollars)?\s+(?:to|from|with|on|by|goes to)\s+(?:the\s+)?(?:paddle\s+|number\s+|bidder\s+)?(\d{1,4})\b/g;
   const MONEY_RE = /\$\s?(\d+(?:\.\d+)?)|\b(\d+(?:\.\d+)?)\s*(?:dollars|bucks)\b/g;
   const NUM_RE = /\b(\d{2,7})\b/g;
+  const AFTER_PADDLE_WORD = /\b(?:paddles?|numbers?|bidders?|bid number|card)\s*\$?\s?$/;
 
   // ctx: { high, next, opening, increment }
   function parseBidPhrases(text, ctx) {
@@ -77,6 +81,8 @@
     TO_RE.lastIndex = 0;
     while ((m = TO_RE.exec(t))) {
       const amount = Number(m[1]);
+      // "bidder 42 to 150": the 42 is the paddle, not an amount going to paddle 150.
+      if (AFTER_PADDLE_WORD.test(t.slice(0, m.index + m[0].indexOf(m[1])))) continue;
       if (plausible(amount)) push(m[2], amount, false, m.index);
     }
 
